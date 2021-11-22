@@ -1,5 +1,5 @@
 mod pinned_vec;
-use std::{any::Any, cell::RefCell, future::Future, pin::Pin, rc::Rc, task::Poll};
+use std::{any::Any, cell::RefCell, future::Future, rc::Rc, task::Poll};
 
 use pinned_vec::PinnedVec;
 
@@ -78,8 +78,6 @@ where
     let mut bm = ctx.result.borrow_mut();
     bm.take().unwrap()
 }
-
-pub type BoxedFuture<T> = Pin<Box<dyn Future<Output = T>>>;
 
 #[cfg(test)]
 mod tests {
