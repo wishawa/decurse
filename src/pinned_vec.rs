@@ -10,6 +10,7 @@ impl<T> Block<T> {
             vec: Vec::with_capacity(capacity),
         }
     }
+    #[allow(dead_code)]
     fn get(&self, index: usize) -> Option<&T> {
         self.vec.get(index)
     }
@@ -49,6 +50,7 @@ impl<T> PinnedVec<T> {
     pub fn len(&self) -> usize {
         self.len
     }
+    #[allow(dead_code)]
     pub fn get(&self, index: usize) -> Option<Pin<&T>> {
         if index >= self.len {
             None
