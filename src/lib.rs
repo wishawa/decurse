@@ -17,16 +17,28 @@ impl<O> Clone for Context<O> {
     }
 }
 
-pub struct LinkedFuture<O> {
-    ctx: Context<O>,
+pub struct PendOnce {
+    pended: bool,
 }
 
-impl<O> Future for LinkedFuture<O> {
-    type Output = O;
-    fn poll(self: std::pin::Pin<&mut Self>, _: &mut std::task::Context<'_>) -> Poll<Self::Output> {
-        match self.ctx.result.borrow_mut().take() {
-            Some(r) => Poll::Ready(r),
-            None => Poll::Pending,
+impl PendOnce {
+    pub fn new() -> Self {
+        Self { pended: false }
+    }
+}
+
+impl Future for PendOnce {
+    type Output = ();
+
+    fn poll(
+        mut self: std::pin::Pin<&mut Self>,
+        _: &mut std::task::Context<'_>,
+    ) -> Poll<Self::Output> {
+        if self.pended {
+            Poll::Ready(())
+        } else {
+            self.pended = true;
+            Poll::Pending
         }
     }
 }
@@ -38,12 +50,11 @@ impl<O> Context<O> {
             result: Rc::new(RefCell::new(None)),
         }
     }
-    pub fn set_next<F: Future<Output = O> + 'static>(&self, fut: F) -> LinkedFuture<O> {
+    pub fn set_next<F: Future<Output = O> + 'static>(&self, fut: F) {
         // UNWRAP: The decurse macro allows only one F type, so downcast should always succeed.
         let next: &RefCell<Option<F>> = self.next.downcast_ref().unwrap();
         let mut bm = next.borrow_mut();
         *bm = Some(fut);
-        LinkedFuture { ctx: self.clone() }
     }
 }
 
@@ -84,9 +95,22 @@ where
     }
 }
 
+#[macro_export]
+macro_rules! recurse {
+    ($ctx:ident, $fun:ident($($args:expr),*)) => {
+        {
+            $ctx.set_next($fun($ctx.clone(), $($args),*));
+            PendOnce::new().await;
+            let res = {
+                $ctx.result.borrow_mut().take().unwrap()
+            };
+            res
+        }
+    };
+}
+
 #[cfg(test)]
 mod tests {
-
     use super::*;
     #[test]
     fn stack_factorial() {
@@ -117,8 +141,7 @@ mod tests {
             if x == 0 {
                 1
             } else {
-                let lf = ctx.set_next(factorial(ctx.clone(), x - 1));
-                x * lf.await
+                recurse!(ctx, factorial(x - 1)) * x
             }
         }
         assert_eq!(execute(|ctx| { factorial(ctx, 6) }), 720);
@@ -130,13 +153,7 @@ mod tests {
             if x == 0 || x == 1 {
                 1
             } else {
-                ({
-                    let lf = ctx.set_next(fibonacci(ctx.clone(), x - 1));
-                    lf.await
-                }) + ({
-                    let lf = ctx.set_next(fibonacci(ctx.clone(), x - 2));
-                    lf.await
-                })
+                recurse!(ctx, fibonacci(x - 1)) + recurse!(ctx, fibonacci(x - 2))
             }
         }
         assert_eq!(execute(|ctx| fibonacci(ctx, 10)), 89);
@@ -154,22 +171,19 @@ mod tests {
     //     }
     //     assert_eq!(20000100000, stack_triangular(200000));
     // }
-    
+
     #[test]
     fn triangular() {
-        fn decurse_triangular(x: u64) -> u64 {
+        fn triangular(x: u64) -> u64 {
             async fn decurse_triangular(ctx: Context<u64>, x: u64) -> u64 {
                 if x == 0 {
                     0
                 } else {
-                    ({
-                        let lf = ctx.set_next(decurse_triangular(ctx.clone(), x - 1));
-                        lf.await
-                    }) + x
+                    recurse!(ctx, decurse_triangular(x - 1)) + x
                 }
             }
             execute(|ctx| decurse_triangular(ctx, x))
         }
-        assert_eq!(20000100000, decurse_triangular(200000));
+        assert_eq!(20000100000, triangular(200000));
     }
 }
