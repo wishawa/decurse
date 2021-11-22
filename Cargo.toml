@@ -1,0 +1,10 @@
+[package]
+name = "decurse"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+pfn = "0.1"
+waker-fn = "1.1"
