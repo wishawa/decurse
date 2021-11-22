@@ -1,5 +1,8 @@
 use std::pin::Pin;
 
+// PinnedVec allocates multiple sub-vector, all of which never move.
+// A Block is a sub-vector. It is created with a specific capacity and never go beyond that.
+// Elements in a Block can only be accessed through Pin.
 struct Block<T> {
     vec: Vec<T>,
 }
@@ -11,11 +14,17 @@ impl<T> Block<T> {
         }
     }
     #[allow(dead_code)]
-    fn get(&self, index: usize) -> Option<&T> {
-        self.vec.get(index)
+    fn get(&self, index: usize) -> Option<Pin<&T>> {
+        // SAFETY: Since the vector's allocation never move, all its contents are pinned.
+        self.vec
+            .get(index)
+            .map(|p| unsafe { Pin::new_unchecked(p) })
     }
-    fn get_mut(&mut self, index: usize) -> Option<&mut T> {
-        self.vec.get_mut(index)
+    fn get_mut(&mut self, index: usize) -> Option<Pin<&mut T>> {
+        // SAFETY: Since the vector's allocation never move, all its contents are pinned.
+        self.vec
+            .get_mut(index)
+            .map(|p| unsafe { Pin::new_unchecked(p) })
     }
     fn push(&mut self, item: T) {
         assert!(self.vec.len() < self.vec.capacity());
@@ -58,7 +67,7 @@ impl<T> PinnedVec<T> {
             let (outter, inner) = Self::split_idx(index);
             let block = self.blocks.get(outter).unwrap();
             let item = block.get(inner).unwrap();
-            Some(unsafe { Pin::new_unchecked(item) })
+            Some(item)
         }
     }
     pub fn get_mut(&mut self, index: usize) -> Option<Pin<&mut T>> {
@@ -68,7 +77,7 @@ impl<T> PinnedVec<T> {
             let (outter, inner) = Self::split_idx(index);
             let block = self.blocks.get_mut(outter).unwrap();
             let item = block.get_mut(inner).unwrap();
-            Some(unsafe { Pin::new_unchecked(item) })
+            Some(item)
         }
     }
     pub fn push(&mut self, item: T) {

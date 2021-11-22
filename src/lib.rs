@@ -51,7 +51,7 @@ impl<O> Context<O> {
         }
     }
     pub fn set_next<F: Future<Output = O> + 'static>(&self, fut: F) {
-        // UNWRAP: The decurse macro allows only one F type, so downcast should always succeed.
+        // UNWRAP Safety: The decurse macro allows only one F type, so downcast should always succeed.
         let next: &RefCell<Option<F>> = self.next.downcast_ref().unwrap();
         let mut bm = next.borrow_mut();
         *bm = Some(fut);
@@ -70,7 +70,7 @@ where
     heap_stack.push(run(ctx.clone()));
     loop {
         let len = heap_stack.len();
-        // UNWRAP: The only way len could go down is through the pop in the Poll::Ready case,
+        // UNWRAP Safety: The only way len could go down is through the pop in the Poll::Ready case,
         // in which we return if len is 1. So len never gets to 0.
         let fut = heap_stack.get_mut(len - 1).unwrap();
         let polled = fut.poll(&mut dummy_async_cx);
@@ -85,9 +85,9 @@ where
                 }
             }
             Poll::Pending => {
-                // UNWRAP: The decurse macro allows only one F type, so downcast should always succeed.
+                // UNWRAP Safety: The decurse macro allows only one F type, so downcast should always succeed.
                 let next: &RefCell<Option<F>> = ctx.next.downcast_ref().unwrap();
-                // UNWRAP: The decurse macro only yields when recursing,
+                // UNWRAP Safety: The decurse macro only yields when recursing,
                 // in which case `next` would be filled before Pending is returned (see ctx.set_next).
                 heap_stack.push(next.take().unwrap());
             }
@@ -102,6 +102,8 @@ macro_rules! recurse {
             $ctx.set_next($fun($ctx.clone(), $($args),*));
             PendOnce::new().await;
             let res = {
+                // UNWRAP Safety: In the PendOnce.await above, the executor would execute the recursive call.
+                // Only when the result of that is available would the executor re-poll this function.
                 $ctx.result.borrow_mut().take().unwrap()
             };
             res
