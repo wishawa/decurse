@@ -39,6 +39,7 @@ impl<O> Context<O> {
         }
     }
     pub fn set_next<F: Future<Output = O> + 'static>(&self, fut: F) -> LinkedFuture<O> {
+        // UNWRAP: The decurse macro allows only one F type, so downcast should always succeed.
         let next: &RefCell<Option<F>> = self.next.downcast_ref().unwrap();
         let mut bm = next.borrow_mut();
         *bm = Some(fut);
@@ -51,32 +52,36 @@ where
     F: Future + 'static,
     R: FnOnce(Context<F::Output>) -> F,
 {
-    let waker = waker_fn::waker_fn(|| {});
-    let mut cx = std::task::Context::from_waker(&waker);
-    let mut heap_stack: PinnedVec<F> = PinnedVec::new();
+    let dummy_waker = waker_fn::waker_fn(|| {});
+    let mut dummy_async_cx: std::task::Context = std::task::Context::from_waker(&dummy_waker);
     let ctx: Context<F::Output> = Context::new::<F>();
+    let mut heap_stack: PinnedVec<F> = PinnedVec::new();
     heap_stack.push(run(ctx.clone()));
     loop {
         let len = heap_stack.len();
-        if len == 0 {
-            break;
-        }
+        // UNWRAP: The only way len could go down is through the pop in the Poll::Ready case,
+        // in which we return if len is 1. So len never gets to 0.
         let fut = heap_stack.get_mut(len - 1).unwrap();
-        let polled = fut.poll(&mut cx);
+        let polled = fut.poll(&mut dummy_async_cx);
         match polled {
             Poll::Ready(r) => {
-                let mut bm = ctx.result.borrow_mut();
-                *bm = Some(r);
-                heap_stack.pop();
+                if len == 1 {
+                    break r;
+                } else {
+                    let mut bm = ctx.result.borrow_mut();
+                    *bm = Some(r);
+                    heap_stack.pop();
+                }
             }
             Poll::Pending => {
+                // UNWRAP: The decurse macro allows only one F type, so downcast should always succeed.
                 let next: &RefCell<Option<F>> = ctx.next.downcast_ref().unwrap();
+                // UNWRAP: The decurse macro only yields when recursing,
+                // in which case `next` would be filled before Pending is returned (see ctx.set_next).
                 heap_stack.push(next.take().unwrap());
             }
         }
     }
-    let mut bm = ctx.result.borrow_mut();
-    bm.take().unwrap()
 }
 
 #[cfg(test)]
