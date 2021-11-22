@@ -141,4 +141,35 @@ mod tests {
         }
         assert_eq!(execute(|ctx| fibonacci(ctx, 10)), 89);
     }
+
+    // This test cause stack overflow.
+    // #[test]
+    // fn stack_triangular() {
+    //     fn stack_triangular(x: u64) -> u64 {
+    //         if x == 0 {
+    //             0
+    //         } else {
+    //             stack_triangular(x - 1) + x
+    //         }
+    //     }
+    //     assert_eq!(20000100000, stack_triangular(200000));
+    // }
+    
+    #[test]
+    fn triangular() {
+        fn decurse_triangular(x: u64) -> u64 {
+            async fn decurse_triangular(ctx: Context<u64>, x: u64) -> u64 {
+                if x == 0 {
+                    0
+                } else {
+                    ({
+                        let lf = ctx.set_next(decurse_triangular(ctx.clone(), x - 1));
+                        lf.await
+                    }) + x
+                }
+            }
+            execute(|ctx| decurse_triangular(ctx, x))
+        }
+        assert_eq!(20000100000, decurse_triangular(200000));
+    }
 }
