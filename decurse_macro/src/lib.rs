@@ -58,7 +58,6 @@ impl Parsed {
             parse_quote!(())
         };
         let name = new.sig.ident.clone();
-        let vis = new.vis;
         let args = new.sig.inputs.clone();
         let arg_names: Punctuated<Pat, Comma> = args
             .iter()
@@ -67,6 +66,7 @@ impl Parsed {
                 _ => None,
             })
             .collect();
+        let sig = new.sig.clone();
 
         // Modifying signature
         new.sig.inputs.insert(
@@ -90,7 +90,7 @@ impl Parsed {
 
         // Create wrapper
         Ok(quote! {
-            #vis fn #name(#args) -> #ret {
+            #sig {
                 #new
                 ::decurse::execute(|__decurse_ctx| { #name(__decurse_ctx, #arg_names) })
             }

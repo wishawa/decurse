@@ -30,6 +30,7 @@ fn test_fibonacci() {
 
 #[test]
 fn test_no_return() {
+    #[decurse]
     fn no_return(modify_me: Rc<RefCell<String>>, iter: u32) {
         if iter == 0 {
         } else {

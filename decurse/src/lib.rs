@@ -1,7 +1,7 @@
 mod pinned_vec;
-use std::{any::Any, cell::RefCell, future::Future, rc::Rc, task::Poll};
-
+pub use decurse_macro::decurse;
 use pinned_vec::PinnedVec;
+use std::{any::Any, cell::RefCell, future::Future, rc::Rc, task::Poll};
 
 pub struct Context<O> {
     next: Rc<dyn Any>,
