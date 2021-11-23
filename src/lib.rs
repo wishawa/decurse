@@ -50,11 +50,16 @@ impl<O> Context<O> {
             result: Rc::new(RefCell::new(None)),
         }
     }
-    pub fn set_next<F: Future<Output = O> + 'static>(&self, fut: F) {
+    pub fn set_next<F: Future<Output = O> + 'static>(&self, fut: F) -> PendOnce {
         // UNWRAP Safety: The decurse macro allows only one F type, so downcast should always succeed.
         let next: &RefCell<Option<F>> = self.next.downcast_ref().unwrap();
         let mut bm = next.borrow_mut();
         *bm = Some(fut);
+        PendOnce::new()
+    }
+    pub fn get_result(&self) -> Option<O> {
+        let mut bm = self.result.borrow_mut();
+        bm.take()
     }
 }
 
@@ -98,16 +103,13 @@ where
 #[macro_export]
 macro_rules! recurse {
     ($ctx:ident, $fun:ident($($args:expr),*)) => {
-        {
-            $ctx.set_next($fun($ctx.clone(), $($args),*));
-            PendOnce::new().await;
-            let res = {
-                // UNWRAP Safety: In the PendOnce.await above, the executor would execute the recursive call.
-                // Only when the result of that is available would the executor re-poll this function.
-                $ctx.result.borrow_mut().take().unwrap()
-            };
-            res
-        }
+        ({
+            let f = $ctx.set_next($fun($ctx.clone(), $($args),*));
+            f.await;
+            // UNWRAP Safety: In the PendOnce.await above, the executor would execute the recursive call.
+            // Only when the result of that is available would the executor re-poll this function.
+            $ctx.get_result().unwrap()
+        })
     };
 }
 
