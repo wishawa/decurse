@@ -14,6 +14,9 @@ struct Parsed(ItemFn);
 impl Parse for Parsed {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let f: ItemFn = input.parse()?;
+        if let Some(a) = &f.sig.asyncness {
+            return Err(Error::new(a.span, "Async function not supported."));
+        }
         Ok(Self(f))
     }
 }
@@ -58,6 +61,7 @@ impl Parsed {
             parse_quote!(())
         };
         let name = new.sig.ident.clone();
+        let sig = new.sig.clone();
         let args = new.sig.inputs.clone();
         let arg_names: Punctuated<Pat, Comma> = args
             .iter()
@@ -66,7 +70,6 @@ impl Parsed {
                 _ => None,
             })
             .collect();
-        let sig = new.sig.clone();
 
         // Modifying signature
         new.sig.inputs.insert(
