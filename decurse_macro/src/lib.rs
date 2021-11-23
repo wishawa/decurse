@@ -49,12 +49,15 @@ impl Fold for Folder {
 
 impl Parsed {
     fn generate(self) -> Result<TokenStream, Error> {
-        let mut new = self.0.clone();
+        let mut new = self.0;
+
+        // Extracting infos
         let ret: Type = if let ReturnType::Type(_a, t) = &new.sig.output {
             *t.clone()
         } else {
             parse_quote!(())
         };
+        let name = new.sig.ident.clone();
         let vis = new.vis;
         let args = new.sig.inputs.clone();
         let arg_names: Punctuated<Pat, Comma> = args
@@ -65,18 +68,17 @@ impl Parsed {
             })
             .collect();
 
-        let name = new.sig.ident.clone();
-
-        let ctx: FnArg = parse_quote! (
-            __decurse_context: ::decurse::Context<#ret>
+        // Modifying signature
+        new.sig.inputs.insert(
+            0,
+            parse_quote! (
+                __decurse_context: ::decurse::Context<#ret>
+            ),
         );
-        new.sig.inputs.insert(0, ctx);
-
         new.vis = Visibility::Inherited;
+        new.sig.asyncness = Some(Token!(async)(Span::call_site()));
 
-        let asn = Token!(async)(Span::call_site());
-        new.sig.asyncness = Some(asn);
-
+        // Modifying body
         let mut folder = Folder::new(&name);
         let stmts: Vec<Stmt> = new
             .block
@@ -86,6 +88,7 @@ impl Parsed {
             .collect();
         new.block.stmts = stmts;
 
+        // Create wrapper
         Ok(quote! {
             #vis fn #name(#args) -> #ret {
                 #new
