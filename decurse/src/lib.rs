@@ -1,105 +1,100 @@
-mod pinned_vec;
 mod pend_once;
+mod pinned_vec;
 pub use decurse_macro::decurse;
+pub use pend_once::PendOnce;
+use pfn::PFnOnce;
 use pinned_vec::PinnedVec;
-use pend_once::PendOnce;
-use std::{cell::RefCell, future::Future, rc::Rc, task::Poll};
+use scoped_tls::scoped_thread_local;
+use std::{cell::RefCell, future::Future, task::Poll};
 
-pub struct Context<'a, O> {
-    next: &'a (),
-    result: &'a RefCell<Option<O>>,
+pub struct Context<F: Future> {
+    next: RefCell<Option<F>>,
+    result: RefCell<Option<F::Output>>,
 }
 
-unsafe fn transmute_next_back<'a, F: 'a>(from: &'a ()) -> &'a RefCell<Option<F>> {
-    std::mem::transmute(from)
-}
-fn transmute_next<'a, F: 'a>(from: &'a RefCell<Option<F>>) -> &'a () {
-    unsafe { std::mem::transmute(from) }
-}
-
-
-impl<'a, O> Clone for Context<'a, O> {
-    fn clone(&self) -> Self {
+impl<F: Future> Context<F> {
+    pub fn new() -> Self {
         Self {
-            next: self.next,
-            result: self.result,
+            next: RefCell::new(None),
+            result: RefCell::new(None),
         }
     }
-}
-
-impl<'a, O> Context<'a, O> {
-    pub fn set_next<F: Future<Output = O> + 'a>(&self, fut: F) -> pend_once::PendOnce {
-        // UNWRAP Safety: The decurse macro allows only one F type, so downcast should always succeed.
-        let next: &RefCell<Option<F>> = unsafe {
-            transmute_next_back(self.next)
-        };
-        let mut bm = next.borrow_mut();
-        *bm = Some(fut);
-        pend_once::PendOnce::new()
+    fn to_untyped(&self) -> *const () {
+        self as *const Self as *const ()
     }
-    pub fn get_result(&self) -> Option<O> {
-        let mut bm = self.result.borrow_mut();
-        bm.take()
+    pub unsafe fn set_next(self_ptr: *const (), fut: F) {
+        let this: &Self = &*(self_ptr as *const Self);
+        *this.next.borrow_mut() = Some(fut);
+    }
+    pub unsafe fn get_result(self_ptr: *const ()) -> F::Output {
+        let this: &Self = &*(self_ptr as *const Self);
+        this.result.borrow_mut().take().unwrap()
     }
 }
 
-pub fn execute<'a, 'c, F, R>(run: R) -> F::Output
+scoped_thread_local! (static CONTEXT: *const ());
+
+pub fn execute<'a, F>(fut: F) -> F::Output
 where
-    'a: 'c,
     F: Future + 'a,
-    R: FnOnce(Context<'c, F::Output>) -> F,
-    F::Output: 'static,
+    F::Output: 'a,
 {
     let dummy_waker = waker_fn::waker_fn(|| {});
     let mut dummy_async_cx: std::task::Context = std::task::Context::from_waker(&dummy_waker);
-    let next_cell = RefCell::new(Option::<F>::None);
-    let result_cell = RefCell::new(Option::<F::Output>::None);
-    let ctx: Context<'c, F::Output> = unsafe {
-        std::mem::transmute(Context {
-            next: transmute_next(&next_cell),
-            result: &result_cell,
-        })
-    };
-    let mut heap_stack: PinnedVec<F> = PinnedVec::new();
-    heap_stack.push(run(ctx.clone()));
-    loop {
-        let len = heap_stack.len();
-        // UNWRAP Safety: The only way len could go down is through the pop in the Poll::Ready case,
-        // in which we return if len is 1. So len never gets to 0.
-        let fut = heap_stack.get_mut(len - 1).unwrap();
-        let polled = fut.poll(&mut dummy_async_cx);
-        match polled {
-            Poll::Ready(r) => {
-                if len == 1 {
-                    break r;
-                } else {
-                    let mut bm = ctx.result.borrow_mut();
-                    *bm = Some(r);
-                    heap_stack.pop();
+    let ctx: Context<F> = Context::new();
+
+    let output = CONTEXT.set(&ctx.to_untyped(), || {
+        let mut heap_stack: PinnedVec<F> = PinnedVec::new();
+        heap_stack.push(fut);
+        loop {
+            let len = heap_stack.len();
+            // UNWRAP Safety: The only way len could go down is through the pop in the Poll::Ready case,
+            // in which we return if len is 1. So len never gets to 0.
+            let fut = heap_stack.get_mut(len - 1).unwrap();
+            let polled = fut.poll(&mut dummy_async_cx);
+            match polled {
+                Poll::Ready(r) => {
+                    if len == 1 {
+                        break r;
+                    } else {
+                        let mut bm = ctx.result.borrow_mut();
+                        *bm = Some(r);
+                        heap_stack.pop();
+                    }
+                }
+                Poll::Pending => {
+                    // UNWRAP Safety: The decurse macro only yields when recursing,
+                    // in which case `next` would be filled before Pending is returned (see ctx.set_next).
+                    heap_stack.push(ctx.next.borrow_mut().take().unwrap());
                 }
             }
-            Poll::Pending => {
-                // UNWRAP Safety: The decurse macro allows only one F type, so downcast should always succeed.
-                let next: &RefCell<Option<F>> = unsafe { transmute_next_back(ctx.next) };
-                // UNWRAP Safety: The decurse macro only yields when recursing,
-                // in which case `next` would be filled before Pending is returned (see ctx.set_next).
-                heap_stack.push(next.take().unwrap());
-            }
         }
-    }
+    });
+    output
 }
 
 #[macro_export]
 macro_rules! recurse {
-    ($ctx:ident, $fun:ident($($args:expr),*)) => {
+    ($fun:ident($($args:expr),*)) => {
         ({
-            let f = $ctx.set_next($fun($ctx.clone(), $($args),*));
-            f.await;
-            // UNWRAP Safety: In the PendOnce.await above, the executor would execute the recursive call.
-            // Only when the result of that is available would the executor re-poll this function.
-            $ctx.get_result().unwrap()
+            unsafe { $crate::set_next($fun($($args),*)) };
+            let po = $crate::PendOnce::new();
+            po.await;
+            unsafe { $crate::get_result($fun) }
         })
     };
+}
+
+pub unsafe fn set_next<F: Future>(fut: F) {
+    CONTEXT.with(|c| unsafe { Context::set_next(*c, fut) })
+}
+
+pub unsafe fn get_result<A, R, F>(_phantom: R) -> F::Output
+where
+    R: PFnOnce<A, PFnOutput = F>,
+    F: Future,
+{
+    CONTEXT.with(|c| unsafe { Context::<F>::get_result(*c) })
 }
 
 #[cfg(test)]
@@ -130,26 +125,26 @@ mod tests {
 
     #[test]
     fn factorial() {
-        async fn factorial<'a>(ctx: Context<'a, u32>, x: u32) -> u32 {
+        async fn factorial(x: u32) -> u32 {
             if x == 0 {
                 1
             } else {
-                recurse!(ctx, factorial(x - 1)) * x
+                recurse!(factorial(x - 1)) * x
             }
         }
-        assert_eq!(execute(|ctx| { factorial(ctx, 6) }), 720);
+        assert_eq!(execute(factorial(6)), 720);
     }
 
     #[test]
     fn fibonacci() {
-        async fn fibonacci<'a>(ctx: Context<'a, u32>, x: u32) -> u32 {
+        async fn fibonacci(x: u32) -> u32 {
             if x == 0 || x == 1 {
                 1
             } else {
-                recurse!(ctx, fibonacci(x - 1)) + recurse!(ctx, fibonacci(x - 2))
+                recurse!(fibonacci(x - 1)) + recurse!(fibonacci(x - 2))
             }
         }
-        assert_eq!(execute(|ctx| fibonacci(ctx, 10)), 89);
+        assert_eq!(execute(fibonacci(10)), 89);
     }
 
     // This test cause stack overflow.
@@ -168,14 +163,14 @@ mod tests {
     #[test]
     fn triangular() {
         fn triangular(x: u64) -> u64 {
-            async fn decurse_triangular<'a>(ctx: Context<'a, u64>, x: u64) -> u64 {
+            async fn decurse_triangular(x: u64) -> u64 {
                 if x == 0 {
                     0
                 } else {
-                    recurse!(ctx, decurse_triangular(x - 1)) + x
+                    recurse!(decurse_triangular(x - 1)) + x
                 }
             }
-            execute(|ctx| decurse_triangular(ctx, x))
+            execute(decurse_triangular(x))
         }
         assert_eq!(20000100000, triangular(200000));
     }

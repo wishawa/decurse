@@ -3,11 +3,11 @@ use std::task::Poll;
 use std::future::Future;
 
 pub struct PendOnce {
-    pub(crate) pended: bool,
+    pended: bool,
 }
 
 impl PendOnce {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self { pended: false }
     }
 }

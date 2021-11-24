@@ -6,7 +6,7 @@ use syn::{
     parse_macro_input, parse_quote,
     punctuated::Punctuated,
     token::Comma,
-    Error, Expr, ExprCall, FnArg, ItemFn, Pat, ReturnType, Stmt, Token, Type, Visibility,
+    Error, Expr, ExprCall, FnArg, ItemFn, Pat, Stmt, Token, Visibility,
 };
 
 struct Parsed(ItemFn);
@@ -34,7 +34,7 @@ impl Folder {
 }
 
 fn generate_call(call: &ExprCall) -> Expr {
-    parse_quote!(::decurse::recurse!(__decurse_context, #call))
+    parse_quote!(::decurse::recurse!(#call))
 }
 
 impl Fold for Folder {
@@ -53,17 +53,10 @@ impl Fold for Folder {
 impl Parsed {
     fn generate(self) -> Result<TokenStream, Error> {
         let mut new = self.0;
-
-        // Extracting infos
-        let ret: Type = if let ReturnType::Type(_a, t) = &new.sig.output {
-            *t.clone()
-        } else {
-            parse_quote!(())
-        };
         let name = new.sig.ident.clone();
         let sig = new.sig.clone();
         let args = new.sig.inputs.clone();
-        let arg_names: Punctuated<Pat, Comma> = args
+        let arg_pats: Punctuated<Pat, Comma> = args
             .iter()
             .filter_map(|a| match a {
                 FnArg::Typed(t) => Some(*t.pat.clone()),
@@ -71,13 +64,6 @@ impl Parsed {
             })
             .collect();
 
-        // Modifying signature
-        new.sig.inputs.insert(
-            0,
-            parse_quote! (
-                __decurse_context: ::decurse::Context<#ret>
-            ),
-        );
         new.vis = Visibility::Inherited;
         new.sig.asyncness = Some(Token!(async)(Span::call_site()));
 
@@ -95,7 +81,7 @@ impl Parsed {
         Ok(quote! {
             #sig {
                 #new
-                ::decurse::execute(|__decurse_ctx| { #name(__decurse_ctx, #arg_names) })
+                ::decurse::execute( #name(#arg_pats) )
             }
         })
     }

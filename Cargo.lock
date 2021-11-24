@@ -7,6 +7,8 @@ name = "decurse"
 version = "0.1.0"
 dependencies = [
  "decurse_macro",
+ "pfn",
+ "scoped-tls",
  "waker-fn",
 ]
 
@@ -18,6 +20,12 @@ dependencies = [
  "quote",
  "syn",
 ]
+
+[[package]]
+name = "pfn"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fa74ea1b349058719dba30bd9e4e39a6151bb02ba1c38ebe0ba2bd97e5a71777"
 
 [[package]]
 name = "proc-macro2"
@@ -36,6 +44,12 @@ checksum = "38bc8cc6a5f2e3655e0899c1b848643b2562f853f114bfec7be120678e3ace05"
 dependencies = [
  "proc-macro2",
 ]
+
+[[package]]
+name = "scoped-tls"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ea6a9290e3c9cf0f18145ef7ffa62d68ee0bf5fcd651017e586dc7fd5da448c2"
 
 [[package]]
 name = "syn"

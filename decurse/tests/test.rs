@@ -73,3 +73,39 @@ fn test_no_arg() {
         assert_eq!(*f.borrow(), 5);
     });
 }
+
+#[test]
+fn test_borrow() {
+    #[decurse]
+    fn binary_search(s: &[i32], f: i32) -> usize {
+        let len = s.len();
+        if len == 0 {
+            0
+        } else {
+            let midpoint = len / 2;
+            let mid = s[midpoint];
+            match f.cmp(&mid) {
+                std::cmp::Ordering::Less => binary_search(&s[..midpoint], f),
+                std::cmp::Ordering::Equal => midpoint,
+                std::cmp::Ordering::Greater => {
+                    binary_search(&s[(midpoint + 1)..], f) + (midpoint + 1)
+                }
+            }
+        }
+    }
+
+    let arr: Vec<i32> = (0..2000).map(|x| x * 2).collect();
+    assert_eq!(binary_search(&arr, 1333), 667);
+}
+
+#[test]
+fn test_borrow_current() {
+    fn borrow_current(a: &str) {
+        let mut idxs = a.char_indices();
+        if let Some((loc, _ch)) = idxs.nth(1) {
+            let s = String::from(&a[loc..]);
+            borrow_current(&s);
+        }
+    }
+    borrow_current("asdf hello world lkjh qwer");
+}

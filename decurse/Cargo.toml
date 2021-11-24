@@ -8,3 +8,5 @@ edition = "2018"
 [dependencies]
 waker-fn = "1.1"
 decurse_macro = { path = "../decurse_macro/" }
+scoped-tls = "1.0"
+pfn = "0.1"
