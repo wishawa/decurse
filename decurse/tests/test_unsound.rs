@@ -75,16 +75,32 @@ fn test_no_arg() {
 }
 
 #[test]
+fn test_generic() {
+    #[decurse_unsound]
+    fn recursive<'a, T: std::ops::Sub<i32, Output = T> + std::cmp::PartialEq + 'a>(
+        value: T,
+        until: &'a T,
+    ) -> T {
+        if &value == until {
+            value
+        } else {
+            recursive(value - 1, until)
+        }
+    }
+    assert_eq!(recursive(5, &0), 0);
+}
+
+#[test]
 fn test_borrow() {
     #[decurse_unsound]
-    fn binary_search(s: &[i32], f: i32) -> usize {
+    fn binary_search<T: Eq + Ord>(s: &[T], f: T) -> usize {
         let len = s.len();
         if len == 0 {
             0
         } else {
             let midpoint = len / 2;
-            let mid = s[midpoint];
-            match f.cmp(&mid) {
+            let mid = &s[midpoint];
+            match f.cmp(mid) {
                 std::cmp::Ordering::Less => binary_search(&s[..midpoint], f),
                 std::cmp::Ordering::Equal => midpoint,
                 std::cmp::Ordering::Greater => {
@@ -93,7 +109,6 @@ fn test_borrow() {
             }
         }
     }
-
     let arr: Vec<i32> = (0..2000).map(|x| x * 2).collect();
     assert_eq!(binary_search(&arr, 1333), 667);
 }
@@ -113,18 +128,27 @@ fn test_borrow_current() {
 
 // Macro error
 // fn macro_error() {
-// 	#[decurse_unsound]
-// 	fn clos() {
-// 		|| {
-// 			// Should error: "Decurse: recursive call inside closure not supported."
-// 			clos();
-// 		};
-// 	}
-// 	#[decurse_unsound]
-// 	fn asy() {
-// 		async {
-// 			// Should error: "Decurse: recursive call inside async block not supported."
-// 			asy();
-// 		};
-// 	}
+//     #[decurse_unsound]
+//     fn clos() {
+//         || {
+//             // Should error: "Decurse: recursive call inside closure not supported."
+//             clos();
+//         };
+//     }
+
+//     #[decurse_unsound]
+//     fn asy() {
+//         async {
+//             // Should error: "Decurse: recursive call inside async block not supported."
+//             asy();
+//         };
+//     }
+
+//     #[decurse_unsound]
+//     fn fun() {
+//         fn rec() {
+//             // Should error: "Decurse: recursive call in sub-function not supported."
+//             fun();
+//         }
+//     }
 // }

@@ -6,7 +6,7 @@ use syn::{
     parse_macro_input, parse_quote,
     punctuated::Punctuated,
     token::Comma,
-    Error, Expr, FnArg, ItemFn, Pat, Signature, Stmt, Token, Visibility,
+    Error, Expr, FnArg, Generics, ItemFn, Pat, Signature, Stmt, Token, Visibility,
 };
 struct Parsed(ItemFn);
 
@@ -23,6 +23,20 @@ impl Parse for Parsed {
         }
         Ok(Self(f))
     }
+}
+
+fn remove_lifetimes(sig: &Signature) -> Generics {
+    let mut generics = sig.generics.clone();
+    generics.params = generics
+        .params
+        .into_iter()
+        .filter_map(|p| match p {
+            syn::GenericParam::Type(t) => Some(syn::GenericParam::Type(t)),
+            syn::GenericParam::Lifetime(_) => None,
+            syn::GenericParam::Const(v) => Some(syn::GenericParam::Const(v)),
+        })
+        .collect();
+    generics
 }
 
 struct ArgChecker {
@@ -83,7 +97,8 @@ impl Folder {
     }
     fn generate_call(&self, args: &Punctuated<Expr, Comma>) -> Expr {
         let func = &self.sig.ident;
-        let spi = self.sig.generics.split_for_impl();
+        let generics_wo_lt = remove_lifetimes(&self.sig);
+        let spi = generics_wo_lt.split_for_impl();
         let tbfs = &spi.1.as_turbofish();
         if self.use_unsound_impl {
             parse_quote!(::decurse::for_macro_only_recurse_unsound!(#func#tbfs, (#args)))
@@ -98,8 +113,9 @@ impl Fold for Folder {
         match &node {
             Expr::Call(c) => {
                 if let Expr::Path(p) = &*c.func {
-                    let ident = &p.path.segments.last().unwrap().ident;
-                    if ident == &self.sig.ident {
+                    let ident = &p.path.segments.first().unwrap().ident;
+                    let l = p.path.segments.len();
+                    if l == 1 && ident == &self.sig.ident {
                         if self.closure_nested > 0 {
                             self.errors.push(Error::new(
                                 ident.span(),
@@ -149,7 +165,10 @@ impl Fold for Folder {
 fn generate(mut new: ItemFn, use_unsound_impl: bool) -> Result<TokenStream, Error> {
     // Extracting infos
     let name = new.sig.ident.clone();
-    let sig = new.sig.clone();
+    let generics_wo_lt = remove_lifetimes(&new.sig);
+    let spi = generics_wo_lt.split_for_impl();
+    let tbfs = &spi.1.as_turbofish();
+    let orig_sig = new.sig.clone();
     let args = new.sig.inputs.clone();
     let arg_names: Punctuated<Pat, Comma> = args
         .iter()
@@ -179,16 +198,16 @@ fn generate(mut new: ItemFn, use_unsound_impl: bool) -> Result<TokenStream, Erro
     // Create wrapper
     if use_unsound_impl {
         Ok(quote! {
-            #sig {
+            #orig_sig {
                 #new
-                ::decurse::for_macro_only::unsound::execute(#name(#arg_names))
+                ::decurse::for_macro_only::unsound::execute(#name#tbfs(#arg_names))
             }
         })
     } else {
         Ok(quote! {
-            #sig {
+            #orig_sig {
                 #new
-                ::decurse::for_macro_only::sound::execute(#name(#arg_names))
+                ::decurse::for_macro_only::sound::execute(#name#tbfs(#arg_names))
             }
         })
     }

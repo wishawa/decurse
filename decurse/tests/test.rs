@@ -84,7 +84,7 @@ fn test_generic() {
         if value == until {
             value
         } else {
-            recursive(value - 1, until)
+            recursive::<T>(value - 1, until)
         }
     }
     assert_eq!(recursive(5, 0), 0);
