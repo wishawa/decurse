@@ -5,57 +5,55 @@ pub use pend_once::PendOnce;
 use pfn::PFnOnce;
 use pinned_vec::PinnedVec;
 use scoped_tls::scoped_thread_local;
-use std::{cell::RefCell, future::Future, task::Poll};
+use std::{any::Any, cell::RefCell, future::Future, task::Poll};
 
 pub struct Context<F: Future> {
     next: RefCell<Option<F>>,
     result: RefCell<Option<F::Output>>,
 }
 
-impl<F: Future> Context<F> {
+impl<F: Future + 'static> Context<F> {
     pub fn new() -> Self {
         Self {
             next: RefCell::new(None),
             result: RefCell::new(None),
         }
     }
-    fn to_untyped(&self) -> *const () {
-        self as *const Self as *const ()
-    }
-    pub unsafe fn set_next(self_ptr: *const (), fut: F) {
-        let this: &Self = &*(self_ptr as *const Self);
+    pub fn set_next(self_ptr: &Box<dyn Any>, fut: F) {
+        let this: &Self = self_ptr.downcast_ref().unwrap();
         *this.next.borrow_mut() = Some(fut);
     }
-    pub unsafe fn get_result(self_ptr: *const ()) -> F::Output {
-        let this: &Self = &*(self_ptr as *const Self);
+    pub fn get_result(self_ptr: &Box<dyn Any>) -> F::Output {
+        let this: &Self = self_ptr.downcast_ref().unwrap();
         this.result.borrow_mut().take().unwrap()
     }
 }
 
-scoped_thread_local! (static CONTEXT: *const ());
+scoped_thread_local! (static CONTEXT: Box<dyn Any>);
 
-pub unsafe fn set_next<F: Future>(fut: F) {
-    CONTEXT.with(|c| unsafe { Context::set_next(*c, fut) })
+pub unsafe fn set_next<F: Future + 'static>(fut: F) {
+    CONTEXT.with(|c| Context::set_next(c, fut))
 }
 
 pub unsafe fn get_result<A, R, F>(_phantom: R) -> F::Output
 where
     R: PFnOnce<A, PFnOutput = F>,
-    F: Future,
+    F: Future + 'static,
 {
-    CONTEXT.with(|c| unsafe { Context::<F>::get_result(*c) })
+    CONTEXT.with(|c| Context::<F>::get_result(c))
 }
 
-pub fn execute<'a, F>(fut: F) -> F::Output
+pub fn execute<F>(fut: F) -> F::Output
 where
-    F: Future + 'a,
-    F::Output: 'a,
+    F: Future + 'static,
 {
     let dummy_waker = waker_fn::waker_fn(|| {});
     let mut dummy_async_cx: std::task::Context = std::task::Context::from_waker(&dummy_waker);
     let ctx: Context<F> = Context::new();
+    let any_ctx: Box<dyn Any> = Box::new(ctx);
+    let ctx: &Context<F> = any_ctx.downcast_ref().unwrap();
 
-    let output = CONTEXT.set(&ctx.to_untyped(), || {
+    let output = CONTEXT.set(&any_ctx, || {
         let mut heap_stack: PinnedVec<F> = PinnedVec::new();
         heap_stack.push(fut);
         loop {
@@ -90,8 +88,7 @@ macro_rules! recurse {
     ($fun:ident($($args:expr),*)) => {
         ({
             unsafe { $crate::set_next($fun($($args),*)) };
-            let po = $crate::PendOnce::new();
-            po.await;
+            $crate::PendOnce::new().await;
             unsafe { $crate::get_result($fun) }
         })
     };
