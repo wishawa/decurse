@@ -1,6 +1,5 @@
-mod pend_once;
+/// Private for use by decurse macro only.
+pub mod for_macro_only;
 
-pub mod sound;
-pub mod unsound;
-
-pub use sound::decurse_sound as decurse;
+pub use for_macro_only::sound::decurse_sound as decurse;
+pub use for_macro_only::unsound::decurse_unsound;

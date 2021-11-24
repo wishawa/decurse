@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use decurse::unsound::decurse_unsound;
+use decurse::decurse_unsound;
 
 #[test]
 fn test_factorial() {

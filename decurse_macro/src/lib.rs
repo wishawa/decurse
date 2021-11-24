@@ -42,9 +42,9 @@ impl Folder {
 
 fn generate_call(call: &ExprCall, use_unsound_impl: bool) -> Expr {
     if use_unsound_impl {
-        parse_quote!(::decurse::recurse_unsound!(#call))
+        parse_quote!(::decurse::for_macro_only_recurse_unsound!(#call))
     } else {
-        parse_quote!(::decurse::recurse_sound!(#call))
+        parse_quote!(::decurse::for_macro_only_recurse_sound!(#call))
     }
 }
 
@@ -124,14 +124,14 @@ fn generate(mut new: ItemFn, use_unsound_impl: bool) -> Result<TokenStream, Erro
         Ok(quote! {
             #sig {
                 #new
-                ::decurse::unsound::execute(#name(#arg_names))
+                ::decurse::for_macro_only::unsound::execute(#name(#arg_names))
             }
         })
     } else {
         Ok(quote! {
             #sig {
                 #new
-                ::decurse::sound::execute(#name(#arg_names))
+                ::decurse::for_macro_only::sound::execute(#name(#arg_names))
             }
         })
     }
