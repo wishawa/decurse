@@ -31,11 +31,11 @@ impl<F: Future + 'static> Context<F> {
 
 scoped_thread_local! (static CONTEXT: Box<dyn Any>);
 
-pub unsafe fn set_next<F: Future + 'static>(fut: F) {
+pub fn set_next<F: Future + 'static>(fut: F) {
     CONTEXT.with(|c| Context::set_next(c, fut))
 }
 
-pub unsafe fn get_result<A, R, F>(_phantom: R) -> F::Output
+pub fn get_result<A, R, F>(_phantom: R) -> F::Output
 where
     R: PFnOnce<A, PFnOutput = F>,
     F: Future + 'static,
@@ -87,9 +87,9 @@ where
 macro_rules! recurse {
     ($fun:ident($($args:expr),*)) => {
         ({
-            unsafe { $crate::set_next($fun($($args),*)) };
+            $crate::set_next($fun($($args),*));
             $crate::PendOnce::new().await;
-            unsafe { $crate::get_result($fun) }
+            $crate::get_result($fun)
         })
     };
 }
