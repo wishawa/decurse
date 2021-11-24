@@ -1,7 +1,11 @@
 [package]
 name = "decurse_macro"
 version = "0.1.0"
+authors = ["Wisha Wa <wisha.wa@yandex.com>"]
 edition = "2018"
+license = "MPL-2.0"
+description = "Proc macros for the decurse crate."
+readme = "README.md"
 
 [lib]
 proc-macro = true
