@@ -1,5 +1,5 @@
 pub use super::pend_once::PendOnce;
-pub use decurse_macro::decurse;
+pub use decurse_macro::decurse_sound;
 use pfn::PFnOnce;
 use pinned_vec::PinnedVec;
 use scoped_tls::scoped_thread_local;

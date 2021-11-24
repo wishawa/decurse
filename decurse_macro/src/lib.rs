@@ -138,7 +138,7 @@ fn generate(mut new: ItemFn, use_unsound_impl: bool) -> Result<TokenStream, Erro
 }
 
 #[proc_macro_attribute]
-pub fn decurse(
+pub fn decurse_sound(
     _attr: proc_macro::TokenStream,
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
