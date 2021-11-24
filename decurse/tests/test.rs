@@ -73,3 +73,19 @@ fn test_no_arg() {
         assert_eq!(*f.borrow(), 5);
     });
 }
+
+#[test]
+fn test_generic() {
+    #[decurse]
+    fn recursive<T: std::ops::Sub<i32, Output = T> + std::cmp::PartialEq + 'static>(
+        value: T,
+        until: T,
+    ) -> T {
+        if value == until {
+            value
+        } else {
+            recursive(value - 1, until)
+        }
+    }
+    assert_eq!(recursive(5, 0), 0);
+}

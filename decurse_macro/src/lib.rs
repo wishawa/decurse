@@ -1,50 +1,95 @@
-use proc_macro2::{Ident, Span, TokenStream};
+use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::{
-    fold::{fold_expr, Fold},
+    fold::{fold_expr, fold_fn_arg, fold_item_fn, Fold},
     parse::Parse,
     parse_macro_input, parse_quote,
     punctuated::Punctuated,
     token::Comma,
-    Error, Expr, ExprCall, FnArg, ItemFn, Pat, Stmt, Token, Visibility,
+    Error, Expr, FnArg, ItemFn, Pat, Signature, Stmt, Token, Visibility,
 };
 struct Parsed(ItemFn);
 
 impl Parse for Parsed {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let f: ItemFn = input.parse()?;
+        let mut f: ItemFn = input.parse()?;
         if let Some(a) = &f.sig.asyncness {
             return Err(Error::new(a.span, "Decurse: async function not supported."));
+        }
+        let mut arg_checker = ArgChecker::new();
+        f.sig = arg_checker.fold_signature(f.sig);
+        if let Some(err) = arg_checker.errors.into_iter().next() {
+            return Err(err);
         }
         Ok(Self(f))
     }
 }
 
+struct ArgChecker {
+    errors: Vec<Error>,
+}
+impl ArgChecker {
+    fn new() -> Self {
+        Self { errors: Vec::new() }
+    }
+}
+
+impl Fold for ArgChecker {
+    fn fold_fn_arg(&mut self, i: FnArg) -> FnArg {
+        match &i {
+            FnArg::Receiver(s) => self.errors.push(Error::new(
+                s.self_token.span,
+                "Decurse: method not supported.",
+            )),
+            FnArg::Typed(ty) => match &*ty.ty {
+                syn::Type::ImplTrait(impl_trait) => {
+                    self.errors.push(Error::new(
+                        impl_trait.impl_token.span,
+                        "Decurse: impl Trait argument not supported.",
+                    ));
+                }
+                syn::Type::Macro(mac) => {
+                    self.errors.push(Error::new(
+                        mac.mac.bang_token.span,
+                        "Decurse: macro argument type not supported.",
+                    ));
+                }
+                _ => {}
+            },
+        }
+        fold_fn_arg(self, i)
+    }
+}
+
 struct Folder {
     use_unsound_impl: bool,
-    ident: Ident,
+    sig: Signature,
     closure_nested: usize,
     async_nested: usize,
+    fn_nested: usize,
     errors: Vec<Error>,
 }
 
 impl Folder {
-    fn new(ident: &Ident, use_unsound_impl: bool) -> Self {
+    fn new(sig: Signature, use_unsound_impl: bool) -> Self {
         Self {
             use_unsound_impl,
-            ident: ident.clone(),
+            sig,
             closure_nested: 0,
             async_nested: 0,
+            fn_nested: 0,
             errors: Vec::new(),
         }
     }
-}
-
-fn generate_call(call: &ExprCall, use_unsound_impl: bool) -> Expr {
-    if use_unsound_impl {
-        parse_quote!(::decurse::for_macro_only_recurse_unsound!(#call))
-    } else {
-        parse_quote!(::decurse::for_macro_only_recurse_sound!(#call))
+    fn generate_call(&self, args: &Punctuated<Expr, Comma>) -> Expr {
+        let func = &self.sig.ident;
+        let spi = self.sig.generics.split_for_impl();
+        let tbfs = &spi.1.as_turbofish();
+        if self.use_unsound_impl {
+            parse_quote!(::decurse::for_macro_only_recurse_unsound!(#func#tbfs, (#args)))
+        } else {
+            parse_quote!(::decurse::for_macro_only_recurse_sound!(#func#tbfs, (#args)))
+        }
     }
 }
 
@@ -54,7 +99,7 @@ impl Fold for Folder {
             Expr::Call(c) => {
                 if let Expr::Path(p) = &*c.func {
                     let ident = &p.path.segments.last().unwrap().ident;
-                    if ident == &self.ident {
+                    if ident == &self.sig.ident {
                         if self.closure_nested > 0 {
                             self.errors.push(Error::new(
                                 ident.span(),
@@ -67,7 +112,13 @@ impl Fold for Folder {
                                 "Decurse: recursive call inside async block not supported.",
                             ));
                         }
-                        return generate_call(c, self.use_unsound_impl);
+                        if self.fn_nested > 0 {
+                            self.errors.push(Error::new(
+                                ident.span(),
+                                "Decurse: recursive call in sub-function not supported.",
+                            ))
+                        }
+                        return self.generate_call(&c.args);
                     }
                 }
                 fold_expr(self, node)
@@ -86,6 +137,12 @@ impl Fold for Folder {
             }
             _ => fold_expr(self, node),
         }
+    }
+    fn fold_item_fn(&mut self, i: ItemFn) -> ItemFn {
+        self.fn_nested += 1;
+        let r = fold_item_fn(self, i);
+        self.fn_nested -= 1;
+        r
     }
 }
 
@@ -107,7 +164,7 @@ fn generate(mut new: ItemFn, use_unsound_impl: bool) -> Result<TokenStream, Erro
     new.sig.asyncness = Some(Token!(async)(Span::call_site()));
 
     // Modifying body
-    let mut folder = Folder::new(&name, use_unsound_impl);
+    let mut folder = Folder::new(new.sig.clone(), use_unsound_impl);
     let stmts: Vec<Stmt> = new
         .block
         .stmts

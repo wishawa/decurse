@@ -83,11 +83,11 @@ where
 
 #[macro_export]
 macro_rules! for_macro_only_recurse_sound {
-    ($fun:ident($($args:expr),*)) => {
+    ($func:path, ($($args:expr),*)) => {
         ({
-            $crate::for_macro_only::sound::set_next($fun($($args),*));
+            $crate::for_macro_only::sound::set_next($func ($($args),*));
             $crate::for_macro_only::sound::PendOnce::new().await;
-            $crate::for_macro_only::sound::get_result($fun)
+            $crate::for_macro_only::sound::get_result($func)
         })
     };
 }
@@ -124,7 +124,7 @@ mod tests {
             if x == 0 {
                 1
             } else {
-                for_macro_only_recurse_sound!(factorial(x - 1)) * x
+                for_macro_only_recurse_sound!(factorial, (x - 1)) * x
             }
         }
         assert_eq!(execute(factorial(6)), 720);
@@ -136,8 +136,8 @@ mod tests {
             if x == 0 || x == 1 {
                 1
             } else {
-                for_macro_only_recurse_sound!(fibonacci(x - 1))
-                    + for_macro_only_recurse_sound!(fibonacci(x - 2))
+                for_macro_only_recurse_sound!(fibonacci, (x - 1))
+                    + for_macro_only_recurse_sound!(fibonacci, (x - 2))
             }
         }
         assert_eq!(execute(fibonacci(10)), 89);
@@ -163,7 +163,7 @@ mod tests {
                 if x == 0 {
                     0
                 } else {
-                    for_macro_only_recurse_sound!(decurse_triangular(x - 1)) + x
+                    for_macro_only_recurse_sound!(decurse_triangular, (x - 1)) + x
                 }
             }
             execute(decurse_triangular(x))

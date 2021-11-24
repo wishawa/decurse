@@ -84,11 +84,11 @@ where
 
 #[macro_export]
 macro_rules! for_macro_only_recurse_unsound {
-    ($fun:ident($($args:expr),*)) => {
+    ($func:path, ($($args:expr),*)) => {
         ({
-            unsafe { $crate::for_macro_only::unsound::set_next($fun($($args),*)) };
+            unsafe { $crate::for_macro_only::unsound::set_next($func ($($args),*)) };
             $crate::for_macro_only::unsound::PendOnce::new().await;
-            unsafe { $crate::for_macro_only::unsound::get_result($fun) }
+            unsafe { $crate::for_macro_only::unsound::get_result($func) }
         })
     };
 }
@@ -125,7 +125,7 @@ mod tests {
             if x == 0 {
                 1
             } else {
-                for_macro_only_recurse_unsound!(factorial(x - 1)) * x
+                for_macro_only_recurse_unsound!(factorial, (x - 1)) * x
             }
         }
         assert_eq!(execute(factorial(6)), 720);
@@ -137,8 +137,8 @@ mod tests {
             if x == 0 || x == 1 {
                 1
             } else {
-                for_macro_only_recurse_unsound!(fibonacci(x - 1))
-                    + for_macro_only_recurse_unsound!(fibonacci(x - 2))
+                for_macro_only_recurse_unsound!(fibonacci, (x - 1))
+                    + for_macro_only_recurse_unsound!(fibonacci, (x - 2))
             }
         }
         assert_eq!(execute(fibonacci(10)), 89);
@@ -164,7 +164,7 @@ mod tests {
                 if x == 0 {
                     0
                 } else {
-                    for_macro_only_recurse_unsound!(decurse_triangular(x - 1)) + x
+                    for_macro_only_recurse_unsound!(decurse_triangular, (x - 1)) + x
                 }
             }
             execute(decurse_triangular(x))
