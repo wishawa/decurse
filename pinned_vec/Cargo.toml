@@ -1,8 +1,12 @@
 [package]
 name = "pinned_vec"
 version = "0.1.0"
+authors = ["Wisha Wa <wisha.wa@yandex.com>"]
 edition = "2018"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+license = "MPL-2.0"
+description = "Vec-like data structure whose elements never move."
+readme = "README.md"
+documentation = "https://docs.rs/pinned_vec"
+repository = "https://github.com/wishawa/decurse"
 
 [dependencies]
