@@ -8,7 +8,7 @@ use syn::{
     token::Comma,
     Error, Expr, ExprCall, FnArg, ItemFn, Pat, Stmt, Token, Visibility,
 };
-struct Parsed(TokenStream);
+struct Parsed(ItemFn);
 
 impl Parse for Parsed {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
@@ -16,8 +16,7 @@ impl Parse for Parsed {
         if let Some(a) = &f.sig.asyncness {
             return Err(Error::new(a.span, "Decurse: async function not supported."));
         }
-        let generated = generate(f)?;
-        Ok(Self(generated))
+        Ok(Self(f))
     }
 }
 
@@ -129,5 +128,16 @@ pub fn decurse(
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
     let parsed = parse_macro_input!(item as Parsed);
-    parsed.0.into()
+    let generated = generate(parsed.0).unwrap_or_else(Error::into_compile_error);
+    generated.into()
+}
+
+#[proc_macro_attribute]
+pub fn decurse_unsound(
+    _attr: proc_macro::TokenStream,
+    item: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
+    let parsed = parse_macro_input!(item as Parsed);
+    let generated = generate(parsed.0).unwrap_or_else(Error::into_compile_error);
+    generated.into()
 }

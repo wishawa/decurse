@@ -1,59 +1,59 @@
-mod pend_once;
-pub mod unsound;
-pub use decurse_macro::decurse_unsound as decurse;
-pub use pend_once::PendOnce;
+pub use super::pend_once::PendOnce;
+pub use decurse_macro::decurse;
 use pfn::PFnOnce;
 use pinned_vec::PinnedVec;
 use scoped_tls::scoped_thread_local;
-use std::{any::Any, cell::RefCell, future::Future, task::Poll};
+use std::{cell::RefCell, future::Future, task::Poll};
 
 pub struct Context<F: Future> {
     next: RefCell<Option<F>>,
     result: RefCell<Option<F::Output>>,
 }
 
-impl<F: Future + 'static> Context<F> {
+impl<F: Future> Context<F> {
     pub fn new() -> Self {
         Self {
             next: RefCell::new(None),
             result: RefCell::new(None),
         }
     }
-    pub fn set_next(self_ptr: &Box<dyn Any>, fut: F) {
-        let this: &Self = self_ptr.downcast_ref().unwrap();
+    fn to_untyped(&self) -> *const () {
+        self as *const Self as *const ()
+    }
+    pub unsafe fn set_next(self_ptr: *const (), fut: F) {
+        let this: &Self = &*(self_ptr as *const Self);
         *this.next.borrow_mut() = Some(fut);
     }
-    pub fn get_result(self_ptr: &Box<dyn Any>) -> F::Output {
-        let this: &Self = self_ptr.downcast_ref().unwrap();
+    pub unsafe fn get_result(self_ptr: *const ()) -> F::Output {
+        let this: &Self = &*(self_ptr as *const Self);
         this.result.borrow_mut().take().unwrap()
     }
 }
 
-scoped_thread_local! (static CONTEXT: Box<dyn Any>);
+scoped_thread_local! (static CONTEXT: *const ());
 
-pub fn set_next<F: Future + 'static>(fut: F) {
-    CONTEXT.with(|c| Context::set_next(c, fut))
+pub unsafe fn set_next<F: Future>(fut: F) {
+    CONTEXT.with(|c| unsafe { Context::set_next(*c, fut) })
 }
 
-pub fn get_result<A, R, F>(_phantom: R) -> F::Output
+pub unsafe fn get_result<A, R, F>(_phantom: R) -> F::Output
 where
     R: PFnOnce<A, PFnOutput = F>,
-    F: Future + 'static,
+    F: Future,
 {
-    CONTEXT.with(|c| Context::<F>::get_result(c))
+    CONTEXT.with(|c| unsafe { Context::<F>::get_result(*c) })
 }
 
-pub fn execute<F>(fut: F) -> F::Output
+pub fn execute<'a, F>(fut: F) -> F::Output
 where
-    F: Future + 'static,
+    F: Future + 'a,
+    F::Output: 'a,
 {
     let dummy_waker = waker_fn::waker_fn(|| {});
     let mut dummy_async_cx: std::task::Context = std::task::Context::from_waker(&dummy_waker);
     let ctx: Context<F> = Context::new();
-    let any_ctx: Box<dyn Any> = Box::new(ctx);
-    let ctx: &Context<F> = any_ctx.downcast_ref().unwrap();
 
-    let output = CONTEXT.set(&any_ctx, || {
+    let output = CONTEXT.set(&ctx.to_untyped(), || {
         let mut heap_stack: PinnedVec<F> = PinnedVec::new();
         heap_stack.push(fut);
         loop {
@@ -84,12 +84,12 @@ where
 }
 
 #[macro_export]
-macro_rules! recurse {
+macro_rules! recurse_unsound {
     ($fun:ident($($args:expr),*)) => {
         ({
-            $crate::set_next($fun($($args),*));
+            unsafe { $crate::unsound::set_next($fun($($args),*)) };
             $crate::PendOnce::new().await;
-            $crate::get_result($fun)
+            unsafe { $crate::unsound::get_result($fun) }
         })
     };
 }
@@ -126,7 +126,7 @@ mod tests {
             if x == 0 {
                 1
             } else {
-                recurse!(factorial(x - 1)) * x
+                recurse_unsound!(factorial(x - 1)) * x
             }
         }
         assert_eq!(execute(factorial(6)), 720);
@@ -138,7 +138,7 @@ mod tests {
             if x == 0 || x == 1 {
                 1
             } else {
-                recurse!(fibonacci(x - 1)) + recurse!(fibonacci(x - 2))
+                recurse_unsound!(fibonacci(x - 1)) + recurse_unsound!(fibonacci(x - 2))
             }
         }
         assert_eq!(execute(fibonacci(10)), 89);
@@ -164,7 +164,7 @@ mod tests {
                 if x == 0 {
                     0
                 } else {
-                    recurse!(decurse_triangular(x - 1)) + x
+                    recurse_unsound!(decurse_triangular(x - 1)) + x
                 }
             }
             execute(decurse_triangular(x))
