@@ -21,6 +21,7 @@ impl Parse for Parsed {
 }
 
 struct Folder {
+    use_unsound_impl: bool,
     ident: Ident,
     closure_nested: usize,
     async_nested: usize,
@@ -28,8 +29,9 @@ struct Folder {
 }
 
 impl Folder {
-    fn new(ident: &Ident) -> Self {
+    fn new(ident: &Ident, use_unsound_impl: bool) -> Self {
         Self {
+            use_unsound_impl,
             ident: ident.clone(),
             closure_nested: 0,
             async_nested: 0,
@@ -38,8 +40,12 @@ impl Folder {
     }
 }
 
-fn generate_call(call: &ExprCall) -> Expr {
-    parse_quote!(::decurse::recurse!(#call))
+fn generate_call(call: &ExprCall, use_unsound_impl: bool) -> Expr {
+    if use_unsound_impl {
+        parse_quote!(::decurse::recurse_unsound!(#call))
+    } else {
+        parse_quote!(::decurse::recurse_sound!(#call))
+    }
 }
 
 impl Fold for Folder {
@@ -61,7 +67,7 @@ impl Fold for Folder {
                                 "Decurse: recursive call inside async block not supported.",
                             ));
                         }
-                        return generate_call(c);
+                        return generate_call(c, self.use_unsound_impl);
                     }
                 }
                 fold_expr(self, node)
@@ -83,7 +89,7 @@ impl Fold for Folder {
     }
 }
 
-fn generate(mut new: ItemFn) -> Result<TokenStream, Error> {
+fn generate(mut new: ItemFn, use_unsound_impl: bool) -> Result<TokenStream, Error> {
     // Extracting infos
     let name = new.sig.ident.clone();
     let sig = new.sig.clone();
@@ -101,7 +107,7 @@ fn generate(mut new: ItemFn) -> Result<TokenStream, Error> {
     new.sig.asyncness = Some(Token!(async)(Span::call_site()));
 
     // Modifying body
-    let mut folder = Folder::new(&name);
+    let mut folder = Folder::new(&name, use_unsound_impl);
     let stmts: Vec<Stmt> = new
         .block
         .stmts
@@ -114,12 +120,21 @@ fn generate(mut new: ItemFn) -> Result<TokenStream, Error> {
     }
 
     // Create wrapper
-    Ok(quote! {
-        #sig {
-            #new
-            ::decurse::execute(#name(#arg_names))
-        }
-    })
+    if use_unsound_impl {
+        Ok(quote! {
+            #sig {
+                #new
+                ::decurse::unsound::execute(#name(#arg_names))
+            }
+        })
+    } else {
+        Ok(quote! {
+            #sig {
+                #new
+                ::decurse::sound::execute(#name(#arg_names))
+            }
+        })
+    }
 }
 
 #[proc_macro_attribute]
@@ -128,7 +143,7 @@ pub fn decurse(
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
     let parsed = parse_macro_input!(item as Parsed);
-    let generated = generate(parsed.0).unwrap_or_else(Error::into_compile_error);
+    let generated = generate(parsed.0, false).unwrap_or_else(Error::into_compile_error);
     generated.into()
 }
 
@@ -138,6 +153,6 @@ pub fn decurse_unsound(
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
     let parsed = parse_macro_input!(item as Parsed);
-    let generated = generate(parsed.0).unwrap_or_else(Error::into_compile_error);
+    let generated = generate(parsed.0, true).unwrap_or_else(Error::into_compile_error);
     generated.into()
 }
