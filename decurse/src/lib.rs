@@ -34,6 +34,18 @@ impl<F: Future> Context<F> {
 
 scoped_thread_local! (static CONTEXT: *const ());
 
+pub unsafe fn set_next<F: Future>(fut: F) {
+    CONTEXT.with(|c| unsafe { Context::set_next(*c, fut) })
+}
+
+pub unsafe fn get_result<A, R, F>(_phantom: R) -> F::Output
+where
+    R: PFnOnce<A, PFnOutput = F>,
+    F: Future,
+{
+    CONTEXT.with(|c| unsafe { Context::<F>::get_result(*c) })
+}
+
 pub fn execute<'a, F>(fut: F) -> F::Output
 where
     F: Future + 'a,
@@ -83,18 +95,6 @@ macro_rules! recurse {
             unsafe { $crate::get_result($fun) }
         })
     };
-}
-
-pub unsafe fn set_next<F: Future>(fut: F) {
-    CONTEXT.with(|c| unsafe { Context::set_next(*c, fut) })
-}
-
-pub unsafe fn get_result<A, R, F>(_phantom: R) -> F::Output
-where
-    R: PFnOnce<A, PFnOutput = F>,
-    F: Future,
-{
-    CONTEXT.with(|c| unsafe { Context::<F>::get_result(*c) })
 }
 
 #[cfg(test)]
