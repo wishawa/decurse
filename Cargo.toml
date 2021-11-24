@@ -1,5 +1,6 @@
 [workspace]
 members = [
 	"decurse/",
-	"decurse_macro/"
+	"decurse_macro/",
+	"pinned_vec"
 ]

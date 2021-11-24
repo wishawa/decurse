@@ -8,6 +8,7 @@ version = "0.1.0"
 dependencies = [
  "decurse_macro",
  "pfn",
+ "pinned_vec",
  "scoped-tls",
  "waker-fn",
 ]
@@ -26,6 +27,10 @@ name = "pfn"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fa74ea1b349058719dba30bd9e4e39a6151bb02ba1c38ebe0ba2bd97e5a71777"
+
+[[package]]
+name = "pinned_vec"
+version = "0.1.0"
 
 [[package]]
 name = "proc-macro2"

@@ -1,5 +1,4 @@
 mod pend_once;
-mod pinned_vec;
 pub use decurse_macro::decurse;
 pub use pend_once::PendOnce;
 use pfn::PFnOnce;
