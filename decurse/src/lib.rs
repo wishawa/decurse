@@ -1,61 +1,41 @@
 mod pinned_vec;
+mod pend_once;
 pub use decurse_macro::decurse;
 use pinned_vec::PinnedVec;
-use std::{any::Any, cell::RefCell, future::Future, rc::Rc, task::Poll};
+use pend_once::PendOnce;
+use std::{cell::RefCell, future::Future, rc::Rc, task::Poll};
 
-pub struct Context<O> {
-    next: Rc<dyn Any>,
-    result: Rc<RefCell<Option<O>>>,
+pub struct Context<'a, O> {
+    next: &'a (),
+    result: &'a RefCell<Option<O>>,
 }
 
-impl<O> Clone for Context<O> {
+unsafe fn transmute_next_back<'a, F: 'a>(from: &'a ()) -> &'a RefCell<Option<F>> {
+    std::mem::transmute(from)
+}
+fn transmute_next<'a, F: 'a>(from: &'a RefCell<Option<F>>) -> &'a () {
+    unsafe { std::mem::transmute(from) }
+}
+
+
+impl<'a, O> Clone for Context<'a, O> {
     fn clone(&self) -> Self {
         Self {
-            next: self.next.clone(),
-            result: self.result.clone(),
+            next: self.next,
+            result: self.result,
         }
     }
 }
 
-pub struct PendOnce {
-    pended: bool,
-}
-
-impl PendOnce {
-    pub fn new() -> Self {
-        Self { pended: false }
-    }
-}
-
-impl Future for PendOnce {
-    type Output = ();
-
-    fn poll(
-        mut self: std::pin::Pin<&mut Self>,
-        _: &mut std::task::Context<'_>,
-    ) -> Poll<Self::Output> {
-        if self.pended {
-            Poll::Ready(())
-        } else {
-            self.pended = true;
-            Poll::Pending
-        }
-    }
-}
-
-impl<O> Context<O> {
-    fn new<F: Future<Output = O> + 'static>() -> Self {
-        Self {
-            next: Rc::new(RefCell::new(Option::<F>::None)),
-            result: Rc::new(RefCell::new(None)),
-        }
-    }
-    pub fn set_next<F: Future<Output = O> + 'static>(&self, fut: F) -> PendOnce {
+impl<'a, O> Context<'a, O> {
+    pub fn set_next<F: Future<Output = O> + 'a>(&self, fut: F) -> pend_once::PendOnce {
         // UNWRAP Safety: The decurse macro allows only one F type, so downcast should always succeed.
-        let next: &RefCell<Option<F>> = self.next.downcast_ref().unwrap();
+        let next: &RefCell<Option<F>> = unsafe {
+            transmute_next_back(self.next)
+        };
         let mut bm = next.borrow_mut();
         *bm = Some(fut);
-        PendOnce::new()
+        pend_once::PendOnce::new()
     }
     pub fn get_result(&self) -> Option<O> {
         let mut bm = self.result.borrow_mut();
@@ -63,14 +43,23 @@ impl<O> Context<O> {
     }
 }
 
-pub fn execute<F, R>(run: R) -> F::Output
+pub fn execute<'a, 'c, F, R>(run: R) -> F::Output
 where
-    F: Future + 'static,
-    R: FnOnce(Context<F::Output>) -> F,
+    'a: 'c,
+    F: Future + 'a,
+    R: FnOnce(Context<'c, F::Output>) -> F,
+    F::Output: 'static,
 {
     let dummy_waker = waker_fn::waker_fn(|| {});
     let mut dummy_async_cx: std::task::Context = std::task::Context::from_waker(&dummy_waker);
-    let ctx: Context<F::Output> = Context::new::<F>();
+    let next_cell = RefCell::new(Option::<F>::None);
+    let result_cell = RefCell::new(Option::<F::Output>::None);
+    let ctx: Context<'c, F::Output> = unsafe {
+        std::mem::transmute(Context {
+            next: transmute_next(&next_cell),
+            result: &result_cell,
+        })
+    };
     let mut heap_stack: PinnedVec<F> = PinnedVec::new();
     heap_stack.push(run(ctx.clone()));
     loop {
@@ -91,7 +80,7 @@ where
             }
             Poll::Pending => {
                 // UNWRAP Safety: The decurse macro allows only one F type, so downcast should always succeed.
-                let next: &RefCell<Option<F>> = ctx.next.downcast_ref().unwrap();
+                let next: &RefCell<Option<F>> = unsafe { transmute_next_back(ctx.next) };
                 // UNWRAP Safety: The decurse macro only yields when recursing,
                 // in which case `next` would be filled before Pending is returned (see ctx.set_next).
                 heap_stack.push(next.take().unwrap());
@@ -141,7 +130,7 @@ mod tests {
 
     #[test]
     fn factorial() {
-        async fn factorial(ctx: Context<u32>, x: u32) -> u32 {
+        async fn factorial<'a>(ctx: Context<'a, u32>, x: u32) -> u32 {
             if x == 0 {
                 1
             } else {
@@ -153,7 +142,7 @@ mod tests {
 
     #[test]
     fn fibonacci() {
-        async fn fibonacci(ctx: Context<u32>, x: u32) -> u32 {
+        async fn fibonacci<'a>(ctx: Context<'a, u32>, x: u32) -> u32 {
             if x == 0 || x == 1 {
                 1
             } else {
@@ -179,7 +168,7 @@ mod tests {
     #[test]
     fn triangular() {
         fn triangular(x: u64) -> u64 {
-            async fn decurse_triangular(ctx: Context<u64>, x: u64) -> u64 {
+            async fn decurse_triangular<'a>(ctx: Context<'a, u64>, x: u64) -> u64 {
                 if x == 0 {
                     0
                 } else {
