@@ -11,3 +11,6 @@ decurse_macro = { version = "0.0.1", path = "../decurse_macro/" }
 pinned_vec = { version = "0.1", path = "../pinned_vec/" }
 scoped-tls = "1.0"
 pfn = "0.1"
+
+[dev-dependencies]
+owning_ref = "0.4"
