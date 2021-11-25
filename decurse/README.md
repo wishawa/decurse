@@ -20,10 +20,10 @@ println!("{}", factorial(10));
 More examples (fibonacci, DFS, ...) are in the [examples directory](https://github.com/wishawa/decurse/tree/main/decurse/examples/).
 
 ## Functionality
-The macros provided by this crate makes your function run on the heap instead.
-It works on stable Rust (1.56 at time of writing).
+The macros provided by this crate make your recursive functions run on the heap instead.
+Works on stable Rust (1.56 at the time of writing).
 
-Here's an example to illustrate its mechanism.
+Here's an example to illustrate the mechanism.
 
 ```rust
 fn factorial(x: u32) -> u32 {
@@ -43,14 +43,14 @@ fn factorial(x: u32) -> u32 {
 }
 ```
 
-If we call `factorial(1)`, this is what would happen:
-* We run the code in the function starting at point 🅐, as normal.
+If we call `factorial(1)`, the following would happen:
+* We run the code in the function starting at point 🅐.
 * When we reach point 🅑, we don't immediately call `factorial(0)`,
 instead, we save the information that we have to call `factorial(0)`<sup>1</sup>.
-* Once that information is saved, we *pause* the execution of `factorial(1)`, *storing its state on the heap*<sup>2</sup>.
-* We then execute `factorial(0)`. At this point the "stack frame" of `factorial(1)` is not on the stack.
+* Once that information is saved, we *pause* the execution of `factorial(1)`, *storing the state on the heap*<sup>2</sup>.
+* We then execute `factorial(0)`. During this, the "stack state" of `factorial(1)` is not on the stack.
 It is stored on the heap.
-* Once we got the result of `factorial(0)`, we *resume* `factorial(1)` and give it the result of `factorial(0)`.
+* Once we got the result of `factorial(0)`, we *resume* `factorial(1)` giving it the result of `factorial(0)`<sup>3</sup>.
 * The execution continues at point 🅒 and on.
 
 ---
@@ -60,6 +60,7 @@ It is stored on the heap.
 <sup>2</sup> This is accomplished by converting your function into an async function, and awaiting to pause it.
 It is somewhat of a hack using async/await.
 
+<sup>3</sup> This again use thread local.
 ---
 
 <details>
@@ -125,10 +126,11 @@ Arguments and return type can be lifetimed just as in any functions.
 	* The [`owning_ref` crate](https://crates.io/crates/owning_ref) is great for working around this.
 	* You can use the "unsound" variant, of course. But it might cause problems.
 * This is **not** tail-call optimization. Also you can still blow up your heap (although it is much harder).
-* One function only. Alternating recursion (`f` calls `g` and `g` calls `f`) is not supported.
+* One function only. Alternating recursion (`f` calls `g` then `g` calls `f`) is not supported.
 Calling the same function but with different generic parameters is not supported.
-* Async function is not supported.
-* The macro only understand recursive calls that are "direct".
+* Async function are not supported.
+* Struct methods are not supported. Freestanding function only.
+* The macro only understand recursive calls that are written literally.
 
 	```rust
 	// This would work:
@@ -144,23 +146,24 @@ Calling the same function but with different generic parameters is not supported
 * `impl Trait` in argument position is not supported.
 	* You can use normal, named, generics.
 * This is still very experimental. The safe variant doesn't contain unsafe code but even then you should still be careful.
+* Multithreading is not supported.
 
 ## Benchmarks
 
 Benchmarking recursive linear search.
 See [the code](https://github.com/wishawa/decurse/tree/main/decurse/examples/benchmark.rs).
 
-| Vec Size 		| Time (normal) (s)		| Time (decurse) (s)	| decurse/normal 		|
+| Vec Size 		| Time (decurse) (s)	| Time (normal) (s)		| decurse/normal 		|
 |---------------|-----------------------|-----------------------|-----------------------|
-| 20000			| 0.19					| 0.63					| 3.37					|
-| 40000			| 0.42					| 1.29					| 3.08					|
-| 60000			| 0.75					| 1.96					| 2.61					|
-| 80000			| 1.20					| 3.04					| 2.54					|
-| 100000		| Stack Overflow		| 3.52					| N/A					|
-| 120000		| Stack Overflow		| 4.32					| N/A					|
-| 140000		| Stack Overflow		| 5.20					| N/A					|
-| 160000		| Stack Overflow		| 5.94					| N/A					|
-| 180000		| Stack Overflow		| 6.69					| N/A					|
+| 20000			| 0.65					| 0.19					| 3.45					|
+| 40000			| 1.29					| 0.43					| 2.96					|
+| 60000			| 2.11					| 0.78					| 2.69					|
+| 80000			| 2.81					| 1.24					| 2.27					|
+| 100000		| 3.49					| Stack Overflow		| N/A					|
+| 120000		| 4.32					| Stack Overflow		| N/A					|
+| 140000		| 5.23					| Stack Overflow		| N/A					|
+| 160000		| 5.99					| Stack Overflow		| N/A					|
+| 180000		| 6.72					| Stack Overflow		| N/A					|
 
 `decurse` version is about 3x **slower** 😦😦😦.
 
@@ -168,17 +171,17 @@ See [the code](https://github.com/wishawa/decurse/tree/main/decurse/examples/ben
 
 Same benchmark with the `slow(8723)` call uncommented for both `linear_search` and `stack_linear_search`.
 
-| Vec Size 		| Time (normal) (s)		| Time (decurse) (s)	| decurse/normal 		|
+| Vec Size 		| Time (decurse) (s)	| Time (normal) (s)		| decurse/normal 		|
 |---------------|-----------------------|-----------------------|-----------------------|
-| 20000			| 0.71					| 2.74					| 0.26					|
-| 40000			| 1.23					| 5.30					| 0.23					|
-| 60000			| 2.06					| 7.93					| 0.26					|
-| 80000			| 2.91					| 10.99					| 0.27					|
-| 100000		| Stack Overflow		| 3.57					| N/A					|
-| 120000		| Stack Overflow		| 4.56					| N/A					|
-| 140000		| Stack Overflow		| 5.08					| N/A					|
-| 160000		| Stack Overflow		| 5.72					| N/A					|
-| 180000		| Stack Overflow		| 6.75					| N/A					|
+| 20000			| 0.70					| 2.66					| 0.26					|
+| 40000			| 1.46					| 5.39					| 0.27					|
+| 60000			| 2.11					| 8.25					| 0.26					|
+| 80000			| 2.79					| 10.85					| 0.26					|
+| 100000		| 3.56					| Stack Overflow		| N/A					|
+| 120000		| 4.47					| Stack Overflow		| N/A					|
+| 140000		| 5.23					| Stack Overflow		| N/A					|
+| 160000		| 6.16					| Stack Overflow		| N/A					|
+| 180000		| 6.57					| Stack Overflow		| N/A					|
 
 `decurse` version is about 4x **faster** 🤔🤔🤔
 

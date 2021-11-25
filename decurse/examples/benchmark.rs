@@ -88,7 +88,7 @@ fn main() {
 			println!("{}, {:.2}, {:.2}, {:.2}", i * 20000, d, s, d / s);
 		} else {
 			let d = run(i * 20000).as_secs_f64();
-			println!("{}, Stack Overflow, {:.2}, N/A", i * 20000, d);
+			println!("{}, {:.2}, Stack Overflow, N/A", i * 20000, d);
 		}
 	}
 }
