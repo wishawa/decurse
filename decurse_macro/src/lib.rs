@@ -1,4 +1,4 @@
-use proc_macro2::{Span, TokenStream};
+use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use syn::{
 	fold::{fold_expr, fold_fn_arg, fold_item_fn, Fold},
@@ -6,7 +6,7 @@ use syn::{
 	parse_macro_input, parse_quote,
 	punctuated::Punctuated,
 	token::Comma,
-	Error, Expr, FnArg, Generics, ItemFn, Pat, Signature, Stmt, Token, Visibility,
+	Error, Expr, FnArg, Generics, ItemFn, Pat, PatIdent, Signature, Stmt, Token, Visibility,
 };
 struct Parsed(ItemFn);
 
@@ -168,15 +168,27 @@ fn generate(mut new: ItemFn, use_unsound_impl: bool) -> Result<TokenStream, Erro
 	let generics_wo_lt = remove_lifetimes(&new.sig);
 	let spi = generics_wo_lt.split_for_impl();
 	let tbfs = &spi.1.as_turbofish();
-	let orig_sig = new.sig.clone();
-	let args = new.sig.inputs.clone();
-	let arg_names: Punctuated<Pat, Comma> = args
-		.iter()
-		.filter_map(|a| match a {
-			FnArg::Typed(t) => Some(*t.pat.clone()),
-			_ => None,
-		})
-		.collect();
+	let mut wrapping_sig = new.sig.clone();
+	wrapping_sig
+		.inputs
+		.iter_mut()
+		.enumerate()
+		.for_each(|(i, a)| match a {
+			FnArg::Typed(t) => {
+				let ident = Ident::new(&format!("arg_{}", i), Span::call_site());
+				let id = PatIdent {
+					attrs: Vec::new(),
+					by_ref: None,
+					mutability: None,
+					ident,
+					subpat: None,
+				};
+				t.pat = Box::new(Pat::Ident(id));
+			}
+			_ => {}
+		});
+	let arg_names =
+		(0..new.sig.inputs.len()).map(|i| Ident::new(&format!("arg_{}", i), Span::call_site()));
 
 	// Modifying signature
 	new.vis = Visibility::Inherited;
@@ -198,16 +210,16 @@ fn generate(mut new: ItemFn, use_unsound_impl: bool) -> Result<TokenStream, Erro
 	// Create wrapper
 	if use_unsound_impl {
 		Ok(quote! {
-			#orig_sig {
+			#wrapping_sig {
 				#new
-				::decurse::for_macro_only::unsound::execute(#name#tbfs(#arg_names))
+				::decurse::for_macro_only::unsound::execute(#name#tbfs(#(#arg_names),*))
 			}
 		})
 	} else {
 		Ok(quote! {
-			#orig_sig {
+			#wrapping_sig {
 				#new
-				::decurse::for_macro_only::sound::execute(#name#tbfs(#arg_names))
+				::decurse::for_macro_only::sound::execute(#name#tbfs(#(#arg_names),*))
 			}
 		})
 	}
