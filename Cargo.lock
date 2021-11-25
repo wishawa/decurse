@@ -4,7 +4,7 @@ version = 3
 
 [[package]]
 name = "decurse"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "decurse_macro",
  "owning_ref",
@@ -40,7 +40,7 @@ checksum = "fa74ea1b349058719dba30bd9e4e39a6151bb02ba1c38ebe0ba2bd97e5a71777"
 
 [[package]]
 name = "pinned_vec"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "proc-macro2"
