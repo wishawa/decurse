@@ -3,7 +3,7 @@
 //!
 //! Normal Vec holds all its content in one contigious region, and moves when it needs to expand.
 //! PinnedVec holds several smaller sub-vector, each of which never moves.
-//! The first sub-vector is of capacity 1, the second 2, the third 4, the nth 2^(n-2).
+//! The first sub-vector is of capacity 1, the second 2, the third 4, the nth 2^(n-1).
 //!
 //! ## Example Usage
 //! ```rust

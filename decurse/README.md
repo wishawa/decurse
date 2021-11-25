@@ -15,7 +15,7 @@ fn factorial(x: u32) -> u32 {
 	}
 }
 
-println!("{}", factorial(1000));
+println!("{}", factorial(10));
 ```
 More examples (fibonacci, DFS, ...) are in the [examples directory](https://github.com/wishawa/decurse/tree/main/decurse/examples/).
 
@@ -86,6 +86,7 @@ fn factorial(arg_0: u32) -> u32 {
 ```
 
 </details>
+
 ## Usage
 
 This crate provides two macros: `decurse` and `decurse_unsound`.
@@ -195,5 +196,5 @@ I would still love to see what the numbers look like for your use cases. Please 
 ## Credits
 [This blog post by *hurryabit*](https://hurryabit.github.io/blog/stack-safety-for-free/) inspired me to make this.
 The main idea is basically the same.
-Mine is more hacky because I want to avoid generators (which require nightly and won't be stabilize anytime soon),
+Mine is more hacky because I want to avoid generators (which require nightly and won't be stabilized anytime soon),
 so I use async/await instead.
