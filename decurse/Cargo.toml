@@ -8,6 +8,8 @@ description = "Macro to make recursive function run on the heap (i.e. no stack o
 readme = "README.md"
 documentation = "https://docs.rs/decurse"
 repository = "https://github.com/wishawa/decurse"
+keywords = ["recursive", "overflow", "macro"]
+categories = ["rust-patterns", "algorithms"]
 
 [dependencies]
 waker-fn = "1.1"
