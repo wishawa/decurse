@@ -1,4 +1,8 @@
 # PinnedVec
+
+[<img alt="crates.io" src="https://img.shields.io/crates/v/pinned_vec?style=for-the-badge" height="20">](https://crates.io/crates/pinned_vec)
+[<img alt="crates.io" src="https://img.shields.io/docsrs/pinned_vec?style=for-the-badge" height="20">](https://docs.rs/pinned_vec)
+
 Vec-like structure whose elements never move.
 
 Normal Vec holds all its content in one contigious region, and moves when it needs to expand.

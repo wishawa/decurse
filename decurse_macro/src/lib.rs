@@ -1,3 +1,6 @@
+//! This crate provide macros for the [`decurse` crate](https://crates.io/crates/decurse).
+//! Please see there for more details.
+
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use syn::{
