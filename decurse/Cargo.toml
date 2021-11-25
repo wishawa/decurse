@@ -1,6 +1,6 @@
 [package]
 name = "decurse"
-version = "0.0.2"
+version = "0.0.3"
 authors = ["Wisha Wa <wisha.wa@yandex.com>"]
 edition = "2018"
 license = "MPL-2.0"
