@@ -61,6 +61,7 @@ It is stored on the heap.
 It is somewhat of a hack using async/await.
 
 <sup>3</sup> This again use thread local.
+
 ---
 
 <details>
@@ -165,33 +166,30 @@ See [the code](https://github.com/wishawa/decurse/tree/main/decurse/examples/ben
 | 160000		| 5.99					| Stack Overflow		| N/A					|
 | 180000		| 6.72					| Stack Overflow		| N/A					|
 
-`decurse` version is about 3x **slower** 😦😦😦.
+`decurse` version runs at about 35% the performance of the normal version.
 
 ---
 
 Same benchmark with the `slow(8723)` call uncommented for both `linear_search` and `stack_linear_search`.
+`slow()` is an artificial computation to mimick real use cases where the recursive function actually does something.
 
 | Vec Size 		| Time (decurse) (s)	| Time (normal) (s)		| decurse/normal 		|
 |---------------|-----------------------|-----------------------|-----------------------|
-| 20000			| 0.70					| 2.66					| 0.26					|
-| 40000			| 1.46					| 5.39					| 0.27					|
-| 60000			| 2.11					| 8.25					| 0.26					|
-| 80000			| 2.79					| 10.85					| 0.26					|
-| 100000		| 3.56					| Stack Overflow		| N/A					|
-| 120000		| 4.47					| Stack Overflow		| N/A					|
-| 140000		| 5.23					| Stack Overflow		| N/A					|
-| 160000		| 6.16					| Stack Overflow		| N/A					|
-| 180000		| 6.57					| Stack Overflow		| N/A					|
+| 20000			| 2.87					| 2.56					| 1.12					|
+| 40000			| 5.74					| 5.18					| 1.11					|
+| 60000			| 8.64					| 7.80					| 1.11					|
+| 80000			| 11.57					| 10.49					| 1.10					|
+| 100000		| 14.59					| Stack Overflow		| N/A					|
+| 120000		| 17.60					| Stack Overflow		| N/A					|
+| 140000		| 20.59					| Stack Overflow		| N/A					|
+| 160000		| 23.60					| Stack Overflow		| N/A					|
+| 180000		| 26.61					| Stack Overflow		| N/A					|
 
-`decurse` version is about 4x **faster** 🤔🤔🤔
-
-I expected the `slow()` call to just bring the two versions closer.
-It is very strange that the `decurse` version can become faster.
-Maybe the stack usage of the normal version makes it harder for CPU to cache things?
+`decurse` version runs at about 90% the performance of the normal version.
 
 ---
 
-Anyway, the takeaway here is **do your own benchmark on your own use case**.
+Anyway, you should **do your own benchmarks for your own use cases**.
 The recursive linear search implemented here isn't even something anyone would use!
 
 I would still love to see what the numbers look like for your use cases. Please share!

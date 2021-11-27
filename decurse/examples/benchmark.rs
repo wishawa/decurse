@@ -21,7 +21,7 @@ fn linear_search<T>(slice: VecRef<T, [T]>, find: T) -> usize
 where
 	T: Ord + 'static,
 {
-	slow(8723);
+	assert!(slow(8723) < 10000);
 	if let Some(first) = slice.first() {
 		match find.cmp(first) {
 			std::cmp::Ordering::Greater => linear_search(slice.map(|s| &s[1..]), find) + 1,
@@ -36,7 +36,7 @@ fn stack_linear_search<T>(slice: VecRef<T, [T]>, find: T) -> usize
 where
 	T: Ord + 'static,
 {
-	slow(8723);
+	assert!(slow(8723) < 10000);
 	if let Some(first) = slice.first() {
 		match find.cmp(first) {
 			std::cmp::Ordering::Greater => stack_linear_search(slice.map(|s| &s[1..]), find) + 1,
@@ -54,6 +54,7 @@ fn run(h: i32) -> Duration {
 			arr
 		})
 		.collect();
+	
 	let start = Instant::now();
 	for vec in vecs.into_iter() {
 		let or = VecRef::new(vec);
