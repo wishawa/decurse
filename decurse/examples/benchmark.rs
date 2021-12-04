@@ -54,7 +54,7 @@ fn run(h: i32) -> Duration {
 			arr
 		})
 		.collect();
-	
+
 	let start = Instant::now();
 	for vec in vecs.into_iter() {
 		let or = VecRef::new(vec);
