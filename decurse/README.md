@@ -109,21 +109,18 @@ fn some_function(...) -> ...
 This is the version you should prefer. 
 This does not use unsafe code and is thus **safe**.
 
-However, it does **not** work on functions with lifetimed types (`&T`, `SomeStruct<'a>`, etc.) in the argument or return type.
+However, it does **not** work on functions with lifetimed types (`&T`, `SomeStruct<'a>`, etc.) in the argument.
 
 ### `decurse_unsound`
 
-This macro uses unsafe code in very dangerous ways.
-I am far from confident that it is safe, so I'm calling it unsound.
-However, I have yet to come up with an example to demonstrate unsoundness,
-so there is a small chance that this might actually be sound,
-so for brave souls, *try it out*!
+This macro can cause unsoundness (see [example](https://github.com/wishawa/decurse/blob/main/decurse/examples/unsound_usage.rs)).
+My (unproven) believe is that if a function compiles without `#[decurse_unsound]`, then putting `#[decurse_unsound]` on it should be safe.
 
 This version does not suffer from the limitation of the safe version.
-Arguments and return type can be lifetimed just as in any functions.
+Arguments can be lifetimed just as in any functions.
 
 ## Limitations
-* As mentioned, the safe variant only works on functions without lifetimed type arguments or lifetimed return type.
+* As mentioned, the safe variant only works on functions without lifetimed type arguments.
 	* The [`owning_ref` crate](https://crates.io/crates/owning_ref) is great for working around this.
 	* You can use the "unsound" variant, of course. But it might cause problems.
 * This is **not** tail-call optimization. Also you can still blow up your heap (although it is much harder).
